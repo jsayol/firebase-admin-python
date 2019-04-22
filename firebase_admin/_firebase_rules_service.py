@@ -58,56 +58,45 @@ class _FirebaseRulesService(object):
             headers={'X-Client-Version': version_header})
         self._timeout = app.options.get('httpTimeout')
 
-
     def get_rules(self, service):
         # TODO
         pass
-
 
     def set_rules(self, service, content):
         # TODO
         pass
 
-
     def list_rules_releases(self, filters, page_size, page_token):
         # TODO
         pass
-
 
     def get_rules_release(self, name):
         # TODO
         pass
 
-
     def create_rules_release(self, name, ruleset_id):
         # TODO
         pass
-
 
     def update_rules_release(self, name, ruleset_id):
         # TODO
         pass
 
-
     def delete_rules_release(self, name):
         # TODO
         pass
-
 
     def list_rulesets(self, page_size, page_token):
         # TODO
         pass
 
-
     def get_ruleset(self, ruleset_id):
         # TODO
         pass
 
-
     def create_ruleset(self, files):
         # TODO
         pass
-
 
     def delete_ruleset(self, ruleset_id):
         # TODO
