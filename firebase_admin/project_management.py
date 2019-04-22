@@ -28,12 +28,27 @@ import firebase_admin
 from firebase_admin import _http_client
 from firebase_admin import _utils
 
+from firebase_admin._firebase_rules_service import _FirebaseRulesService
+from firebase_admin._database_rules_service import _DatabaseRulesService
+
 
 _PROJECT_MANAGEMENT_ATTRIBUTE = '_project_management'
+_FIREBASE_RULES_ATTRIBUTE = '_firebase_rules'
+_DATABASE_RULES_ATTRIBUTE = '_database_rules'
+
+_VALID_SERVICE_NAMES = frozenset(['database', 'firestore', 'storage'])
 
 
 def _get_project_management_service(app):
     return _utils.get_app_service(app, _PROJECT_MANAGEMENT_ATTRIBUTE, _ProjectManagementService)
+
+
+def _get_firebase_rules_service(app):
+    return _utils.get_app_service(app, _FIREBASE_RULES_ATTRIBUTE, _FirebaseRulesService)
+
+
+def _get_database_rules_service(app):
+    return _utils.get_app_service(app, _DATABASE_RULES_ATTRIBUTE, _DatabaseRulesService)
 
 
 def android_app(app_id, app=None):
@@ -115,6 +130,197 @@ def create_ios_app(bundle_id, display_name=None, app=None):
     return _get_project_management_service(app).create_ios_app(bundle_id, display_name)
 
 
+def get_rules(service, app=None):
+    """Gets the current rules for the service.
+
+    Args:
+        service: Name of the service to use.
+        app: An App instance (optional).
+
+    Returns:
+        string: The contents of the current rules for the service.
+
+    Raises:
+        ValueError: If the input arguments are invalid.
+    """
+    _check_is_valid_service_name(service)
+    if service == 'database':
+        return _get_database_rules_service(app).get_rules()
+    return _get_firebase_rules_service(app).get_rules(service)
+
+
+def set_rules(service, content, app=None):
+    """Sets ``content`` as the new rules to be used with the service.
+
+    Args:
+        service: Name of the service to use.
+        content: The rules string to set.
+        app: An App instance (optional).
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If the input arguments are invalid.
+    """
+    _check_is_valid_service_name(service)
+    if service == 'database':
+        return _get_database_rules_service(app).set_rules(content)
+    return _get_firebase_rules_service(app).set_rules(service, content)
+
+
+def set_rules_from_file(service, file_path, app=None):
+    """Sets the ``file_path`` content as the new rules to be used with the service.
+
+    Args:
+        service: Name of the service to use.
+        file_path: The path to the file containing the rules to set.
+        app: An App instance (optional).
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If the input arguments are invalid.
+    """
+    _check_is_valid_service_name(service)
+    content = "" # TODO: read file from `file_path`
+    if service == 'database':
+        return _get_database_rules_service(app).set_rules(content)
+    return _get_firebase_rules_service(app).set_rules(service, content)
+
+
+def list_rules_releases(filters=None, page_size=None, page_token=None, app=None):
+    """Gets the list of rules releases for the project.
+
+    Args:
+        filters: The filter to use (TODO)
+        page_size: A positive integer indicating the maximum number of releases to include in the
+            returned page (optional). Defaults to 10, and the maximum number allowed is 100.
+        page_token: A non-empty page token string, which indicates the starting point of the page
+            (optional). Defaults to ``None``, which will retrieve the first page of releases.
+        app: An App instance (optional).
+
+    Returns:
+        ListRulesReleasesPage: A ``ListRulesReleasesPage`` instance.
+    """
+    return _get_firebase_rules_service(app).list_rules_releases(filters, page_size, page_token)
+
+
+def get_rules_release(name, app=None):
+    """Gets a rules release by its name.
+
+    Args:
+        name: Name of the release to get.
+        app: An App instance (optional).
+
+    Returns:
+        RulesRelease: a ``RulesRelease`` instance.
+    """
+    return _get_firebase_rules_service(app).get_rules_release(name)
+
+
+def create_rules_release(name, ruleset_id, app=None):
+    """Creates a new rules release with the given name and ruleset id.
+
+    Args:
+        name: Name for the new release.
+        ruleset_id: ID of the ruleset to use.
+        app: An App instance (optional).
+
+    Returns:
+        RulesRelease: a ``RulesRelease`` instance for the newly-created release.
+    """
+    return _get_firebase_rules_service(app).create_rules_release(name, ruleset_id)
+
+
+def update_rules_release(name, ruleset_id, app=None):
+    """Updates a rules release.
+    
+    Updates the existing rules release ``name`` with the given ruleset ID.
+
+    Args:
+        name: Name of the release to update.
+        ruleset_id: ID of the ruleset to use.
+        app: An App instance (optional).
+
+    Returns:
+        RulesRelease: a ``RulesRelease`` instance for the newly-created release.
+    """
+    return _get_firebase_rules_service(app).update_rules_release(name, ruleset_id)
+
+
+def delete_rules_release(name, app=None):
+    """Deletes a rules release by its name.
+
+    Args:
+        name: Name of the release to delete.
+        app: An App instance (optional).
+
+    Returns:
+        None
+    """
+    return _get_firebase_rules_service(app).delete_rules_release(name)
+
+
+def list_rulesets(page_size=None, page_token=None, app=None):
+    """Gets the list of rulesets for the project.
+
+    The Rulesets only contain metadata (``name`` and ``createTime``), not
+    the actual files.
+
+    Args:
+        page_size: A positive integer indicating the maximum number of rulesets to include in the
+            returned page (optional). Defaults to 10, and the maximum number allowed is 100.
+        page_token: A non-empty page token string, which indicates the starting point of the page
+            (optional). Defaults to ``None``, which will retrieve the first page of rulesets.
+        app: An App instance (optional).
+
+    Returns:
+        ListRulesetsPage: A ``ListRulesetsPage`` instance.
+    """
+    return _get_firebase_rules_service(app).list_rulesets(page_size, page_token)
+
+
+def get_ruleset(ruleset_id, app=None):
+    """Gets a ruleset by its name.
+
+    Args:
+        ruleset_id: ID of the ruleset to get.
+        app: An App instance (optional).
+
+    Returns:
+        Ruleset: a ``Ruleset`` instance.
+    """
+    return _get_firebase_rules_service(app).get_ruleset(ruleset_id)
+
+
+def create_ruleset(files, app=None):
+    """Creates a new ruleset with the given name and ruleset id.
+
+    Args:
+        files: A list of ``RulesetFile`` instances.
+        app: An App instance (optional).
+
+    Returns:
+        Ruleset: a ``Ruleset`` instance for the newly-created ruleset.
+    """
+    return _get_firebase_rules_service(app).create_ruleset(files)
+
+
+def delete_ruleset(ruleset_id, app=None):
+    """Deletes a ruleset by its name.
+
+    Args:
+        ruleset_id: ID of the ruleset to delete.
+        app: An App instance (optional).
+
+    Returns:
+        None
+    """
+    return _get_firebase_rules_service(app).delete_ruleset(ruleset_id)
+
+
 def _check_is_string_or_none(obj, field_name):
     if obj is None or isinstance(obj, six.string_types):
         return obj
@@ -137,6 +343,12 @@ def _check_not_none(obj, field_name):
     if obj is None:
         raise ValueError('{0} cannot be None.'.format(field_name))
     return obj
+
+
+def _check_is_valid_service_name(service):
+    if service in _VALID_SERVICE_NAMES:
+        return service
+    raise ValueError('service must be one of: {0}'.format(', '.join(_VALID_SERVICE_NAMES)))
 
 
 class ApiCallError(Exception):
