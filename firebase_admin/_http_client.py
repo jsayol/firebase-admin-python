@@ -130,3 +130,13 @@ class JsonHttpClient(HttpClient):
 
     def parse_body(self, resp):
         return resp.json()
+
+
+class TextHttpClient(HttpClient):
+    """An HTTP client that returns response messages as text."""
+
+    def __init__(self, **kwargs):
+        HttpClient.__init__(self, **kwargs)
+
+    def parse_body(self, resp):
+        return resp.text

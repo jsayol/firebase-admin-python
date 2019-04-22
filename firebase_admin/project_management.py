@@ -164,6 +164,7 @@ def set_rules(service, content, app=None):
         ValueError: If the input arguments are invalid.
     """
     _check_is_valid_service_name(service)
+    _check_is_nonempty_string(content, 'content')
     if service == 'database':
         return _get_database_rules_service(app).set_rules(content)
     return _get_firebase_rules_service(app).set_rules(service, content)
@@ -184,7 +185,12 @@ def set_rules_from_file(service, file_path, app=None):
         ValueError: If the input arguments are invalid.
     """
     _check_is_valid_service_name(service)
-    content = "" # TODO: read file from `file_path`
+    _check_is_nonempty_string(file_path, 'file_path')
+
+    with open(file_path, 'r') as file_handle:
+        content = file_handle.read()
+
+    _check_is_nonempty_string(content, 'rules file contents')
     if service == 'database':
         return _get_database_rules_service(app).set_rules(content)
     return _get_firebase_rules_service(app).set_rules(service, content)
@@ -236,7 +242,7 @@ def create_rules_release(name, ruleset_id, app=None):
 
 def update_rules_release(name, ruleset_id, app=None):
     """Updates a rules release.
-    
+
     Updates the existing rules release ``name`` with the given ruleset ID.
 
     Args:

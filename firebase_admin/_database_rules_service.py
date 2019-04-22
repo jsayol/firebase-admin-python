@@ -52,37 +52,36 @@ class _DatabaseRulesService(object):
                 'to set the databaseURL option.')
         self._db_url = _DatabaseService._validate_url(db_url)
         version_header = 'Python/Admin/{0}'.format(__version__)
-        self._client = _http_client.JsonHttpClient(
+        self._client = _http_client.TextHttpClient(
             credential=app.credential.get_credential(),
-            base_url=db_url.rstrip('/') + _DatabaseRulesService.DATABASE_RULES_PATH,
+            base_url=db_url,
             headers={'X-Client-Version': version_header})
         self._timeout = app.options.get('httpTimeout')
 
-
     def get_rules(self):
-        # TODO
-        pass
-
+        return self._make_request('get', 'Get')
 
     def set_rules(self, content):
-        # TODO
-        pass
+        return self._make_request('put', 'Set', content)
 
-    def _make_request(self, method, url, resource_identifier, resource_identifier_label, json=None):
+    def _make_request(self, method, operation, data=None):
         try:
-            return self._client.body(method=method, url=url, json=json, timeout=self._timeout)
+            return self._client.body(method=method,
+                                     url=_DatabaseRulesService.DATABASE_RULES_PATH,
+                                     data=data,
+                                     timeout=self._timeout)
         except requests.exceptions.RequestException as error:
             raise DatabaseRulesApiCallError(
-                _DatabaseRulesService._extract_message(
-                    resource_identifier, resource_identifier_label, error),
-                error)
+                _DatabaseRulesService._extract_message(operation, error),
+                error
+            )
 
     @staticmethod
-    def _extract_message(identifier, identifier_label, error):
+    def _extract_message(operation, error):
         if not isinstance(error, requests.exceptions.RequestException) or error.response is None:
-            return '{0} "{1}": {2}'.format(identifier_label, identifier, str(error))
+            return '{0} Database rules: {1}'.format(operation, str(error))
         status = error.response.status_code
         message = _DatabaseRulesService.ERROR_CODES.get(status)
         if message:
-            return '{0} "{1}": {2}'.format(identifier_label, identifier, message)
-        return '{0} "{1}": Error {2}.'.format(identifier_label, identifier, status)
+            return '{0} Database rules: {1}'.format(operation, message)
+        return '{0} Database rules: Error {2}.'.format(operation, status)
