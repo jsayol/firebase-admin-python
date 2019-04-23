@@ -30,6 +30,8 @@ from firebase_admin import _utils
 
 from firebase_admin._rules import _DatabaseRulesService
 from firebase_admin._rules import _FirebaseRulesService
+from firebase_admin._rules import RulesetFile
+from firebase_admin._rules import RulesApiCallError
 
 
 _PROJECT_MANAGEMENT_ATTRIBUTE = '_project_management'
@@ -142,11 +144,23 @@ def get_rules(service, app=None):
 
     Raises:
         ValueError: If the input arguments are invalid.
+        RulesApiCallError: If there was an error while interacting with the Rules service.
     """
     _check_is_valid_service_name(service)
     if service == 'database':
         return _get_database_rules_service(app).get_rules()
-    return _get_firebase_rules_service(app).get_rules(service)
+
+    rules_service = _get_database_rules_service(app)
+    release_name = rules_service._get_release_name_for_service(service)
+    release = rules_service.get_rules_release(release_name)
+    ruleset = rules_service.get_ruleset(release.ruleset_id)
+    if len(ruleset.files) < 1:
+        raise ValueError(
+            'The current rules release for service "{0}" has no source files.'.format(service))
+    ruleset_file = ruleset.files[0]
+    _check_not_none(ruleset_file, 'ruleset.files[]')
+    _check_is_nonempty_string(ruleset_file.content, 'ruleset.files[0].content')
+    return ruleset_file.content
 
 
 def set_rules(service, content, app=None):
@@ -162,12 +176,34 @@ def set_rules(service, content, app=None):
 
     Raises:
         ValueError: If the input arguments are invalid.
+        RulesApiCallError: If there was an error while interacting with the Rules service.
     """
     _check_is_valid_service_name(service)
     _check_is_nonempty_string(content, 'content')
     if service == 'database':
         return _get_database_rules_service(app).set_rules(content)
-    return _get_firebase_rules_service(app).set_rules(service, content)
+
+    rules_service = _get_firebase_rules_service(app)
+    ruleset_files = [RulesetFile(service + '.rules', content)]
+    ruleset = rules_service.create_ruleset(ruleset_files)
+    release_name = rules_service._get_release_name_for_service(service)
+    try:
+        rules_service.update_rules_release(release_name, ruleset.ruleset_id)
+    except:
+        # Updating the release fails if it doesn't exist. In that case we create a new one.
+        try:
+            rules_service.create_rules_release(release_name, ruleset.ruleset_id)
+        except RulesApiCallError as error:
+            # Creating the release also failed, so let's delete the ruleset that we just created.
+            try:
+                rules_service.delete_ruleset(ruleset.ruleset_id)
+            except:
+                # Deleting the ruleset failed. Since this is not relevant to the original
+                # operation, let's hide this error from the user.
+                pass
+            finally:
+                # Re-throw the exception we got when creating the release
+                raise error
 
 
 def set_rules_from_file(service, file_path, app=None):
@@ -183,17 +219,21 @@ def set_rules_from_file(service, file_path, app=None):
 
     Raises:
         ValueError: If the input arguments are invalid.
+        RulesApiCallError: If there was an error while interacting with the Rules service.
     """
     _check_is_valid_service_name(service)
     _check_is_nonempty_string(file_path, 'file_path')
 
-    with open(file_path, 'r') as file_handle:
-        content = file_handle.read()
+    try:
+        with open(file_path, 'r') as fh:
+            content = fh.read()
+    except Exception as err:
+        raise ValueError('Unable to read file {}: {}'.format(file_path, err))
 
-    _check_is_nonempty_string(content, 'rules file contents')
+    _check_is_nonempty_string(content, 'file contents in set_rules_from_file()')
     if service == 'database':
         return _get_database_rules_service(app).set_rules(content)
-    return _get_firebase_rules_service(app).set_rules(service, content)
+    return set_rules(service, content)
 
 
 def list_rules_releases(filters=None, page_size=None, page_token=None, app=None):

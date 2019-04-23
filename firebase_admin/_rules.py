@@ -14,6 +14,7 @@
 
 """Internal module for Firebase and Database Rules."""
 
+import re
 import requests
 
 from firebase_admin import _http_client
@@ -91,9 +92,60 @@ class Ruleset(object):
             list: A list of ``RulesetFile`` instances for this Ruleset.
         """
         if self._files is None and self._service is not None:
-            response = self._service.get_ruleset(self._ruleset_id)
-            self._files = response['source']
+            ruleset = self._service.get_ruleset(self._ruleset_id)
+            self._files = ruleset.files
         return self._files
+
+
+class RulesRelease(object):
+    """A reference to a Rules Release within a Firebase project.
+
+    Please use the module-level functions ``get_rules_release(name)`` or
+    ``list_rules_releases()`` to obtain instances of this class instead of instantiating
+    it directly.
+    """
+
+    def __init__(self, name, ruleset_id, create_time, update_time):
+        self._name = name
+        self._ruleset_id = ruleset_id
+        self._create_time = create_time
+        self._update_time = update_time
+
+    @property
+    def name(self):
+        """Returns the ID of this RulesRelease.
+
+        Returns:
+            string: The ID of this RulesRelease.
+        """
+        return self._name
+
+    @property
+    def ruleset_id(self):
+        """Returns the ruleset id of this RulesRelease.
+
+        Returns:
+            string: The ruleset id of this RulesRelease.
+        """
+        return self._ruleset_id
+
+    @property
+    def create_time(self):
+        """Returns the create time of this RulesRelease.
+
+        Returns:
+            string: The create time of this RulesRelease.
+        """
+        return self._create_time
+
+    @property
+    def update_time(self):
+        """Returns the update time of this RulesRelease.
+
+        Returns:
+            string: The update time of this RulesRelease.
+        """
+        return self._update_time
 
 
 class RulesApiCallError(Exception):
@@ -137,7 +189,7 @@ class _DatabaseRulesService(object):
         return self._make_request('get', 'Get')
 
     def set_rules(self, content):
-        return self._make_request('put', 'Set', content)
+        self._make_request('put', 'Set', content)
 
     def _make_request(self, method, operation, data=None):
         try:
@@ -165,9 +217,9 @@ class _DatabaseRulesService(object):
 class _FirebaseRulesService(object):
     """Provides methods for interacting with the Firebase Rules Service."""
 
-    BASE_URL = 'https://firebaserules.googleapis.com'
-    API_VERSION = 'v1'
-    ERROR_CODES = {
+    _BASE_URL = 'https://firebaserules.googleapis.com'
+    _API_VERSION = 'v1'
+    _ERROR_CODES = {
         400: 'Invalid argument provided.',
         401: 'Request not authorized.',
         403: 'Client does not have sufficient privileges.',
@@ -176,6 +228,10 @@ class _FirebaseRulesService(object):
         429: 'Quota exceeded for the requested resource.',
         500: 'Internal server error.',
         503: 'The server could not process the request in time.'
+    }
+    _RELEASE_NAME_FOR_SERVICE = {
+        'firestore': 'cloud.firestore',
+        'storage': 'firebase.storage',
     }
 
     def __init__(self, app):
@@ -186,64 +242,93 @@ class _FirebaseRulesService(object):
                 'set the projectId option, or use service account credentials. Alternatively, set '
                 'the GOOGLE_CLOUD_PROJECT environment variable.')
         self._project_id = project_id
+        self._storage_bucket = app.options.get('storageBucket')
         version_header = 'Python/Admin/{0}'.format(__version__)
         self._client = _http_client.JsonHttpClient(
             credential=app.credential.get_credential(),
             base_url='{0}/{1}/projects/{2}/'.format(
-                _FirebaseRulesService.BASE_URL,
-                _FirebaseRulesService.API_VERSION,
-                project_id
-            ),
+                _FirebaseRulesService._BASE_URL,
+                _FirebaseRulesService._API_VERSION,
+                project_id),
             headers={'X-Client-Version': version_header})
         self._timeout = app.options.get('httpTimeout')
 
-    def get_rules(self, service):
-        # TODO
-        pass
-
-    def set_rules(self, service, content):
-        # TODO
-        pass
-
     def list_rules_releases(self, filters, page_size, page_token):
         # TODO
-        pass
+        raise NotImplementedError
 
     def get_rules_release(self, name):
-        # TODO
-        pass
+        path = 'releases/{0}'.format(name)
+        response = self._make_request('get', path, name, 'Release')
+        return RulesRelease(
+            _FirebaseRulesService._extract_release_name(response["name"]),
+            _FirebaseRulesService._extract_ruleset_id(response["rulesetName"]),
+            response["createTime"],
+            response["updateTime"])
 
     def create_rules_release(self, name, ruleset_id):
-        # TODO
-        pass
+        path = 'releases'
+        request_body = {
+            'release': {
+                'name': 'projects/{0}/releases/{1}'.format(self._project_id, name),
+                'rulesetName': 'projects/{0}/rulesets/{1}'.format(self._project_id, ruleset_id)
+            }
+        }
+        response = self._make_request('post', path, name, 'Release', json=request_body)
+        return RulesRelease(
+            _FirebaseRulesService._extract_release_name(response["name"]),
+            _FirebaseRulesService._extract_ruleset_id(response["rulesetName"]),
+            response["createTime"],
+            response["updateTime"])
 
     def update_rules_release(self, name, ruleset_id):
-        # TODO
-        pass
+        path = 'releases/{0}'.format(name)
+        request_body = {
+            'release': {
+                'name': 'projects/{0}/releases/{1}'.format(self._project_id, name),
+                'rulesetName': 'projects/{0}/rulesets/{1}'.format(self._project_id, ruleset_id)
+            }
+        }
+        response = self._make_request('patch', path, name, 'Release', json=request_body)
+        return RulesRelease(
+            _FirebaseRulesService._extract_release_name(response["name"]),
+            _FirebaseRulesService._extract_ruleset_id(response["rulesetName"]),
+            response["createTime"],
+            response["updateTime"])
 
     def delete_rules_release(self, name):
         # TODO
-        pass
+        raise NotImplementedError
 
     def list_rulesets(self, page_size, page_token):
         # TODO
-        pass
+        raise NotImplementedError
 
     def get_ruleset(self, ruleset_id):
         path = 'rulesets/{0}'.format(ruleset_id)
         response = self._make_request('get', path, ruleset_id, 'Ruleset ID')
         return Ruleset(
-            ruleset_id,
+            _FirebaseRulesService._extract_ruleset_id(response["name"]),
             response["createTime"],
-            files=map(_FirebaseRulesService._create_file_obj, response["source"]["files"]))
+            files=list(map(
+                _FirebaseRulesService._get_ruleset_file_obj,
+                response["source"]["files"])))
 
     def create_ruleset(self, files):
-        # TODO
-        pass
+        path = 'rulesets'
+        files_list = list(map(lambda f: {'name': f.name, 'content': f.content}, files))
+        request_body = {'source': {'files': files_list}}
+        response = self._make_request('post', path, 'create', 'Ruleset ID', json=request_body)
+        return Ruleset(
+            _FirebaseRulesService._extract_ruleset_id(response["name"]),
+            response["createTime"],
+            files=list(map(
+                _FirebaseRulesService._get_ruleset_file_obj,
+                response["source"]["files"])))
 
     def delete_ruleset(self, ruleset_id):
-        # TODO
-        pass
+        path = 'rulesets/{0}'.format(ruleset_id)
+        self._make_request('delete', path, ruleset_id, 'Ruleset ID')
 
     def _make_request(self, method, url, resource_identifier, resource_identifier_label, json=None):
         try:
@@ -254,16 +339,38 @@ class _FirebaseRulesService(object):
                     resource_identifier, resource_identifier_label, error),
                 error)
 
+    def _get_release_name_for_service(self, service):
+        baseName = _FirebaseRulesService._RELEASE_NAME_FOR_SERVICE[service]
+
+        if service == 'storage':
+            if not self._storage_bucket:
+                raise ValueError(
+                    'Unable to determine the storage bucket to use. '
+                    'Make sure to set the "storageBucket" option when calling initializeApp().')
+            return '{0}/{1}'.format(baseName, self._storage_bucket)
+        else:
+            return baseName
+
     @staticmethod
     def _extract_message(identifier, identifier_label, error):
         if not isinstance(error, requests.exceptions.RequestException) or error.response is None:
             return '{0} "{1}": {2}'.format(identifier_label, identifier, str(error))
         status = error.response.status_code
-        message = _FirebaseRulesService.ERROR_CODES.get(status)
+        message = _FirebaseRulesService._ERROR_CODES.get(status)
         if message:
             return '{0} "{1}": {2}'.format(identifier_label, identifier, message)
         return '{0} "{1}": Error {2}.'.format(identifier_label, identifier, status)
 
     @staticmethod
-    def _create_file_obj(file):
+    def _get_ruleset_file_obj(file):
         return RulesetFile(name=file['name'], content=file['content'])
+
+    @staticmethod
+    def _extract_release_name(name):
+        m = re.search('^projects/([^/]+)/releases/(.+)$', name)
+        return m.group(2)
+
+    @staticmethod
+    def _extract_ruleset_id(name):
+        m = re.search('^projects/([^/]+)/rulesets/(.+)$', name)
+        return m.group(2)
