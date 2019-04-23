@@ -12,20 +12,79 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Internal module for Firebase Rules."""
+"""Internal module for Firebase and Database Rules."""
 
 import requests
 
 from firebase_admin import _http_client
 from firebase_admin import __version__
+from firebase_admin.db import _DatabaseService
 
 
-class FirebaseRulesApiCallError(Exception):
-    """An error encountered while interacting with the Firebase Rules Service."""
+class RulesApiCallError(Exception):
+    """An error encountered while interacting with the Rules Service."""
 
     def __init__(self, message, error):
         Exception.__init__(self, message)
         self.detail = error
+
+
+class _DatabaseRulesService(object):
+    """Provides methods for interacting with the Database Rules Service."""
+
+    DATABASE_RULES_PATH = '/.settings/rules.json'
+    ERROR_CODES = {
+        400: 'Invalid argument provided.',
+        401: 'Request not authorized.',
+        403: 'Client does not have sufficient privileges.',
+        404: 'The specified entity could not be found.',
+        409: 'The specified entity already exists.',
+        423: 'The database has been manually locked by an owner.',
+        500: 'Internal server error.',
+        503: 'The server could not process the request in time.'
+    }
+
+    def __init__(self, app):
+        db_url = app.options.get('databaseURL')
+        if not db_url:
+            raise ValueError(
+                'Database URL is required to access the Database Rules Service. Make sure '
+                'to set the databaseURL option.')
+        self._db_url = _DatabaseService._validate_url(db_url)
+        version_header = 'Python/Admin/{0}'.format(__version__)
+        self._client = _http_client.TextHttpClient(
+            credential=app.credential.get_credential(),
+            base_url=db_url,
+            headers={'X-Client-Version': version_header})
+        self._timeout = app.options.get('httpTimeout')
+
+    def get_rules(self):
+        return self._make_request('get', 'Get')
+
+    def set_rules(self, content):
+        return self._make_request('put', 'Set', content)
+
+    def _make_request(self, method, operation, data=None):
+        try:
+            return self._client.body(method=method,
+                                     url=_DatabaseRulesService.DATABASE_RULES_PATH,
+                                     data=data,
+                                     timeout=self._timeout)
+        except requests.exceptions.RequestException as error:
+            raise RulesApiCallError(
+                _DatabaseRulesService._extract_message(operation, error),
+                error
+            )
+
+    @staticmethod
+    def _extract_message(operation, error):
+        if not isinstance(error, requests.exceptions.RequestException) or error.response is None:
+            return '{0} Database rules: {1}'.format(operation, str(error))
+        status = error.response.status_code
+        message = _DatabaseRulesService.ERROR_CODES.get(status)
+        if message:
+            return '{0} Database rules: {1}'.format(operation, message)
+        return '{0} Database rules: Error {2}.'.format(operation, status)
 
 
 class _FirebaseRulesService(object):
@@ -106,7 +165,7 @@ class _FirebaseRulesService(object):
         try:
             return self._client.body(method=method, url=url, json=json, timeout=self._timeout)
         except requests.exceptions.RequestException as error:
-            raise FirebaseRulesApiCallError(
+            raise RulesApiCallError(
                 _FirebaseRulesService._extract_message(
                     resource_identifier, resource_identifier_label, error),
                 error)

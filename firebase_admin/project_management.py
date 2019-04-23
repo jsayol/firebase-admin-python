@@ -28,8 +28,8 @@ import firebase_admin
 from firebase_admin import _http_client
 from firebase_admin import _utils
 
-from firebase_admin._firebase_rules_service import _FirebaseRulesService
-from firebase_admin._database_rules_service import _DatabaseRulesService
+from firebase_admin._rules import _DatabaseRulesService
+from firebase_admin._rules import _FirebaseRulesService
 
 
 _PROJECT_MANAGEMENT_ATTRIBUTE = '_project_management'
