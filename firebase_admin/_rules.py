@@ -21,6 +21,81 @@ from firebase_admin import __version__
 from firebase_admin.db import _DatabaseService
 
 
+class RulesetFile(object):
+    """A reference to a RulesetFile within a Ruleset.
+
+    Please use the ``files`` property of the object returned by the module-level function
+    ``get_ruleset(ruleset_id)`` to obtain instances of this class instead of instantiating it
+    directly.
+    """
+
+    def __init__(self, name, content):
+        self._name = name
+        self._content = content
+
+    @property
+    def name(self):
+        """Returns the name of this Ruleset file.
+
+        Returns:
+            string: The name of this Ruleset file.
+        """
+        return self._name
+
+    @property
+    def content(self):
+        """Returns the content of this Ruleset file.
+
+        Returns:
+            string: The content of this Ruleset file.
+        """
+        return self._content
+
+
+class Ruleset(object):
+    """A reference to a Ruleset within a Firebase project.
+
+    Please use the module-level functions ``get_ruleset(ruleset_id)`` or ``list_rulesets()``
+    to obtain instances of this class instead of instantiating it directly.
+    """
+
+    def __init__(self, ruleset_id, create_time, files=None, service=None):
+        self._ruleset_id = ruleset_id
+        self._create_time = create_time
+        self._service = service
+        self._files = files
+
+    @property
+    def ruleset_id(self):
+        """Returns the ID of this Ruleset.
+
+        Returns:
+            string: The ID of this Ruleset.
+        """
+        return self._ruleset_id
+
+    @property
+    def create_time(self):
+        """Returns the creation time of this Ruleset.
+
+        Returns:
+            string: The creation time of this Ruleset.
+        """
+        return self._create_time
+
+    @property
+    def files(self):
+        """Returns the files of this Ruleset.
+
+        Returns:
+            list: A list of ``RulesetFile`` instances for this Ruleset.
+        """
+        if self._files is None and self._service is not None:
+            response = self._service.get_ruleset(self._ruleset_id)
+            self._files = response['source']
+        return self._files
+
+
 class RulesApiCallError(Exception):
     """An error encountered while interacting with the Rules Service."""
 
@@ -91,6 +166,7 @@ class _FirebaseRulesService(object):
     """Provides methods for interacting with the Firebase Rules Service."""
 
     BASE_URL = 'https://firebaserules.googleapis.com'
+    API_VERSION = 'v1'
     ERROR_CODES = {
         400: 'Invalid argument provided.',
         401: 'Request not authorized.',
@@ -113,7 +189,11 @@ class _FirebaseRulesService(object):
         version_header = 'Python/Admin/{0}'.format(__version__)
         self._client = _http_client.JsonHttpClient(
             credential=app.credential.get_credential(),
-            base_url=_FirebaseRulesService.BASE_URL,
+            base_url='{0}/{1}/projects/{2}/'.format(
+                _FirebaseRulesService.BASE_URL,
+                _FirebaseRulesService.API_VERSION,
+                project_id
+            ),
             headers={'X-Client-Version': version_header})
         self._timeout = app.options.get('httpTimeout')
 
@@ -150,8 +230,12 @@ class _FirebaseRulesService(object):
         pass
 
     def get_ruleset(self, ruleset_id):
-        # TODO
-        pass
+        path = 'rulesets/{0}'.format(ruleset_id)
+        response = self._make_request('get', path, ruleset_id, 'Ruleset ID')
+        return Ruleset(
+            ruleset_id,
+            response["createTime"],
+            files=map(_FirebaseRulesService._create_file_obj, response["source"]["files"]))
 
     def create_ruleset(self, files):
         # TODO
@@ -179,3 +263,7 @@ class _FirebaseRulesService(object):
         if message:
             return '{0} "{1}": {2}'.format(identifier_label, identifier, message)
         return '{0} "{1}": Error {2}.'.format(identifier_label, identifier, status)
+
+    @staticmethod
+    def _create_file_obj(file):
+        return RulesetFile(name=file['name'], content=file['content'])
